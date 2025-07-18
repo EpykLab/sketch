@@ -1,0 +1,23 @@
+[package]
+name = "sketch"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.0", features = ["derive"] }
+reqwest = { version = "0.11", features = ["json"] }
+url = "1.7"
+kuchiki = "0.8.1"
+tokio = { version = "1.0", features = ["full"] }
+
+[profile.release]
+# Optimize for size
+opt-level = "z"
+# Enable Link Time Optimization
+lto = true
+# Reduce number of codegen units to increase optimizations
+codegen-units = 1
+# Abort on panic rather than unwinding (smaller binary)
+panic = "abort"
+# Strip symbols from binary
+strip = true
