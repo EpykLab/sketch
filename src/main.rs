@@ -38,7 +38,7 @@ fn extract_main_content(document: &NodeRef) -> String {
 async fn fetch_url(client: &reqwest::Client, url: &str) -> Result<(String, String), Box<dyn std::error::Error + Send + Sync>> {
     let response = client
         .get(url)
-        .header(USER_AGENT, "ScytheTestScraper/1.0 (for testing purposes; contact: your.email@example.com)")
+        .header(USER_AGENT, "Sketch/1.0 (for testing purposes; contact: your.email@example.com)")
         .send()
         .await?;
 
@@ -62,7 +62,7 @@ async fn fetch_url(client: &reqwest::Client, url: &str) -> Result<(String, Strin
 
 fn extract_links(document: &NodeRef, base_url: &Url, base_domain: &str) -> Vec<String> {
     let mut links = Vec::new();
-    
+
     if let Ok(iter) = document.select("a[href]") {
         for link in iter {
             if let Some(href) = link.attributes.borrow().get("href") {
@@ -75,7 +75,7 @@ fn extract_links(document: &NodeRef, base_url: &Url, base_domain: &str) -> Vec<S
             }
         }
     }
-    
+
     links
 }
 
@@ -122,7 +122,7 @@ async fn process_batch(
 async fn crawl_and_generate_markdown_async(start_url: &str, batch_size: usize, max_pages: usize) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
     let base_url = Url::parse(start_url)?;
     let base_domain = base_url.host_str().unwrap().to_string();
-    
+
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
         .build()?;
@@ -135,7 +135,7 @@ async fn crawl_and_generate_markdown_async(start_url: &str, batch_size: usize, m
 
     while !queue.is_empty() && visited.len() < max_pages {
         let mut batch = Vec::new();
-        
+
         // Collect a batch of URLs to process
         for _ in 0..batch_size {
             if let Some(url) = queue.pop_front() {
@@ -156,7 +156,7 @@ async fn crawl_and_generate_markdown_async(start_url: &str, batch_size: usize, m
 
         // Process the batch
         let (results, new_urls) = process_batch(&client, batch, base_url.clone(), base_domain.clone()).await;
-        
+
         all_results.extend(results);
 
         // Add new URLs to the queue
@@ -177,7 +177,7 @@ async fn crawl_and_generate_markdown_async(start_url: &str, batch_size: usize, m
 
 fn crawl_and_generate_markdown(start_url: &str, batch_size: usize, max_pages: usize) {
     let rt = Runtime::new().unwrap();
-    
+
     match rt.block_on(crawl_and_generate_markdown_async(start_url, batch_size, max_pages)) {
         Ok(results) => {
             println!("{}", results.join("\n"));
