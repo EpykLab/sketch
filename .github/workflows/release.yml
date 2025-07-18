@@ -17,19 +17,19 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            binary_suffix: ""
+            archive: tar.gz
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
-            binary_suffix: ""
+            archive: tar.gz
           - os: macos-latest
             target: x86_64-apple-darwin
-            binary_suffix: ""
+            archive: tar.gz
           - os: macos-latest
             target: aarch64-apple-darwin
-            binary_suffix: ""
+            archive: tar.gz
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            binary_suffix: ".exe"
+            archive: zip
 
     steps:
       - name: Checkout code
@@ -40,11 +40,11 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install musl tools (Linux musl only)
+      - name: Install musl tools
         if: matrix.target == 'x86_64-unknown-linux-musl'
         run: sudo apt-get update && sudo apt-get install -y musl-tools
 
-      - name: Cache cargo registry
+      - name: Cache cargo
         uses: actions/cache@v4
         with:
           path: |
@@ -52,35 +52,31 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-${{ matrix.target }}-
-            ${{ runner.os }}-cargo-
 
       - name: Build binary
-        run: |
-          cargo build \
-            --release \
-            --target ${{ matrix.target }} \
-            --locked
+        run: cargo build --release --target ${{ matrix.target }}
         env:
           RUSTFLAGS: "-C strip=symbols -C opt-level=z -C lto=fat -C codegen-units=1 -C panic=abort"
 
-      - name: Prepare binary
-        shell: bash
+      - name: Package binary (Unix)
+        if: matrix.archive == 'tar.gz'
         run: |
-          mkdir -p artifacts
-          binary_name="sketch${{ matrix.binary_suffix }}"
-          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            cp "target/${{ matrix.target }}/release/${binary_name}" "artifacts/sketch-${{ matrix.target }}${binary_suffix}"
-          else
-            cp "target/${{ matrix.target }}/release/sketch" "artifacts/sketch-${{ matrix.target }}"
-          fi
+          cd target/${{ matrix.target }}/release
+          tar czf ../../../sketch-${{ matrix.target }}.tar.gz sketch
+          cd ../../..
 
-      - name: Upload artifacts
+      - name: Package binary (Windows)
+        if: matrix.archive == 'zip'
+        run: |
+          cd target/${{ matrix.target }}/release
+          7z a ../../../sketch-${{ matrix.target }}.zip sketch.exe
+          cd ../../..
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: sketch-${{ matrix.target }}
-          path: artifacts/
+          path: sketch-${{ matrix.target }}.*
 
   release:
     name: Create Release
@@ -96,59 +92,49 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: artifacts/
+          path: artifacts
+          merge-multiple: true
 
-      - name: Prepare release assets
-        run: |
-          mkdir -p release-assets
-          for dir in artifacts/*/; do
-            if [ -d "$dir" ]; then
-              target=$(basename "$dir" | sed 's/sketch-//')
-              cd "$dir"
-              if ls sketch-* 1> /dev/null 2>&1; then
-                for file in sketch-*; do
-                  if [[ "$file" == *.exe ]]; then
-                    zip "../../release-assets/sketch-${target}.zip" "$file"
-                  else
-                    tar -czf "../../release-assets/sketch-${target}.tar.gz" "$file"
-                  fi
-                done
-              fi
-              cd - > /dev/null
-            fi
-          done
-
-      - name: Extract version from tag
+      - name: Extract version
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
-      - name: Generate changelog
-        id: changelog
-        run: |
-          echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
-          echo "## Changes in ${{ steps.version.outputs.VERSION }}" >> $GITHUB_OUTPUT
-          echo "" >> $GITHUB_OUTPUT
-          echo "### Features" >> $GITHUB_OUTPUT
-          echo "- Multithreaded web scraper with configurable batching" >> $GITHUB_OUTPUT
-          echo "- Cross-platform support (Linux, macOS, Windows)" >> $GITHUB_OUTPUT
-          echo "- Optimized binary size with stripped symbols" >> $GITHUB_OUTPUT
-          echo "" >> $GITHUB_OUTPUT
-          echo "### Downloads" >> $GITHUB_OUTPUT
-          echo "- **Linux (glibc)**: \`sketch-x86_64-unknown-linux-gnu.tar.gz\`" >> $GITHUB_OUTPUT
-          echo "- **Linux (musl)**: \`sketch-x86_64-unknown-linux-musl.tar.gz\`" >> $GITHUB_OUTPUT
-          echo "- **macOS (Intel)**: \`sketch-x86_64-apple-darwin.tar.gz\`" >> $GITHUB_OUTPUT
-          echo "- **macOS (Apple Silicon)**: \`sketch-aarch64-apple-darwin.tar.gz\`" >> $GITHUB_OUTPUT
-          echo "- **Windows**: \`sketch-x86_64-pc-windows-msvc.zip\`" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.VERSION }}
           name: Release ${{ steps.version.outputs.VERSION }}
-          body: ${{ steps.changelog.outputs.CHANGELOG }}
+          body: |
+            ## Sketch ${{ steps.version.outputs.VERSION }}
+            
+            A fast, multithreaded web scraper that crawls same-domain pages and outputs content as Markdown.
+            
+            ### Features
+            - 🚀 Multithreaded with configurable batch processing
+            - 🌐 Cross-platform support
+            - ⚡ Async I/O for maximum performance
+            - 🎯 Same-domain crawling with intelligent link extraction
+            - 📝 Clean Markdown output with embedded HTML
+            
+            ### Downloads
+            Choose the appropriate binary for your platform:
+            
+            - **Linux (glibc)**: `sketch-x86_64-unknown-linux-gnu.tar.gz`
+            - **Linux (musl)**: `sketch-x86_64-unknown-linux-musl.tar.gz`
+            - **macOS (Intel)**: `sketch-x86_64-apple-darwin.tar.gz`
+            - **macOS (Apple Silicon)**: `sketch-aarch64-apple-darwin.tar.gz`
+            - **Windows**: `sketch-x86_64-pc-windows-msvc.zip`
+            
+            ### Usage
+            ```bash
+            # Basic usage
+            sketch https://example.com
+            
+            # With custom options
+            sketch --batch-size 20 --max-pages 100 https://example.com
+            ```
           draft: false
           prerelease: false
-          files: release-assets/*
+          files: artifacts/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
