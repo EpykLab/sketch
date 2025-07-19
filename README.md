@@ -1,5 +1,3 @@
-<h1 align="center">sketch</h1>
-
 <h2 align="center">
   <img src="./assets/sketch-logo.png" width="200" alt="sketch" width="200px">
   <br>
