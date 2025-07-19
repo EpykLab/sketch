@@ -1,6 +1,11 @@
-# Sketch - Multithreaded Web Scraper
+<h1 align="center">sketch</h1>
 
-A fast, multithreaded web scraper that crawls same-domain pages and outputs content as Markdown with embedded HTML.
+<h2 align="center">
+  <img src="./assets/sktch-logo.png" width="200" alt="sketch" width="200px">
+  <br>
+</h2>
+
+<h4 align="center">A CLI for building out assets and resources for the Scythe framework</h4>
 
 ## Features
 
@@ -19,7 +24,7 @@ A fast, multithreaded web scraper that crawls same-domain pages and outputs cont
 Download the latest release for your platform from the [Releases page](../../releases):
 
 - **Linux (glibc)**: `sketch-x86_64-unknown-linux-gnu.tar.gz`
-- **Linux (musl)**: `sketch-x86_64-unknown-linux-musl.tar.gz` 
+- **Linux (musl)**: `sketch-x86_64-unknown-linux-musl.tar.gz`
 - **macOS (Intel)**: `sketch-x86_64-apple-darwin.tar.gz`
 - **macOS (Apple Silicon)**: `sketch-aarch64-apple-darwin.tar.gz`
 - **Windows**: `sketch-x86_64-pc-windows-msvc.zip`
@@ -112,7 +117,7 @@ Each crawled page is output as a Markdown section:
 
 ### Prerequisites
 
-- Rust 1.70+ 
+- Rust 1.70+
 - Cargo
 
 ### Building
