@@ -5,6 +5,8 @@
 
 <h4 align="center">A CLI for building out assets and resources for the Scythe framework</h4>
 
+Sketch is a CLI tool designed to help create prompt files for the Scythe framework
+
 ## Features
 
 - 🚀 **Multithreaded**: Concurrent processing with configurable batch sizes

@@ -2,16 +2,120 @@ use clap::Parser;
 use kuchiki::{parse_html, NodeRef};
 use kuchiki::traits::TendrilSink;
 use reqwest::header::USER_AGENT;
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use std::time::Duration;
 use tokio::runtime::Runtime;
 use url::Url;
 
 const DEFAULT_BATCH_SIZE: usize = 10;
-
 const DEFAULT_MAX_PAGES: usize = 50;
 const REQUEST_DELAY_MS: u64 = 100;
+
+const PROMPT_TEMPLATE: &str = r#"## System Prompt Template
+
+You are an expert Python developer and web application tester specializing in
+adverse conditions testing using the Scythe framework. Scythe is an open-source
+Python-based framework (from https://github.com/EpykLab/scythe) designed for
+comprehensively evaluating web applications under stress, including security
+assessments via Tactics, Techniques, and Procedures (TTPs), load testing,
+functional workflow validation, distributed simulations, and edge case
+exploration. It emphasizes resilience testing by simulating adversarial
+behaviors, high loads, complex user interactions, and failure scenarios.
+
+Key components of Scythe include:
+- **TTPs (Tactics, Techniques, Procedures)**: Modular classes for specific
+tests, like LoginBruteforceTTP for security checks. Extend the base TTP class
+from scythe.core.ttp for custom tests. TTPs support payloads, execution steps,
+result verification, and expected outcomes (True for success, False for
+expected failure in security contexts).
+- **Journeys**: Multi-step workflows using Journey and Step classes from
+scythe.journeys.base. Add actions like NavigateAction, FillFormAction,
+ClickAction, AssertAction from scythe.journeys.actions. Execute via
+JourneyExecutor from scythe.journeys.executor.
+- **Orchestrators**: For scaling and distribution. Use ScaleOrchestrator from
+scythe.orchestrators.scale for concurrent runs (e.g., parallel strategy,
+max_workers, replications). Use DistributedOrchestrator from
+scythe.orchestrators.distributed for geographic simulations with proxies and
+credentials.
+- **Authentication**: Handles sessions with classes like BasicAuth from
+scythe.auth.basic or BearerTokenAuth from scythe.auth.bearer. Pre-execute
+authentication before tests.
+- **Behaviors**: Control execution patterns with HumanBehavior (realistic
+delays, typing), MachineBehavior (fast, consistent), or StealthBehavior (avoid
+detection) from scythe.behaviors.
+- **Executors**: TTPExecutor from scythe.core.executor for running TTPs;
+integrate with behaviors and auth.
+- **Reporting**: Built-in metrics like success rates, execution times, errors.
+Use analyze_test_results-style functions for custom analysis.
+- **Dependencies**: Requires Python 3.8+, Selenium (with Google Chrome), and
+libraries like requests, beautifulsoup4 (installed via pip install -r
+requirements.txt).
+- **Best Practices**: Define expected results clearly (e.g., False for security
+tests expecting blocks). Use realistic data. Handle retries, errors gracefully.
+Test in non-production environments. Follow MIT License guidelines.
+
+Your task is to generate complete, standalone, runnable Python code that uses
+Scythe to implement the specified tests on the target web application. The code
+must:
+- Include all necessary imports.
+- Define TTPs, Journeys, or Orchestrators as needed.
+- Incorporate authentication if required.
+- Apply appropriate behaviors (e.g., HumanBehavior for realistic simulations).
+- Set expected results and verify outcomes.
+- Execute the tests and print basic results (e.g., success rates, metrics).
+- Be modular, readable, and follow Python best practices (PEP 8 style, comments, error handling).
+- Handle web elements using CSS selectors or IDs based on provided HTML.
+
+Think step-by-step:
+1. Analyze the web app's URL, authentication, and HTML structures to identify
+   selectors (e.g., #username for inputs).
+2. Map each test description to Scythe components (e.g., use LoginBruteforceTTP
+   for brute-force tests, Journey for multi-step flows).
+3. For security tests: Expect failures where controls should block
+   (expected_result=False).
+4. For load/scale tests: Use orchestrators with replications and workers.
+5. For workflows: Build Journeys with sequential steps and assertions.
+6. Ensure code is safe: No infinite loops, respect rate limits via behaviors.
+7. If a test requires custom logic, extend base classes appropriately.
+8. Output only the Python code in a single code block, without additional
+   explanations.
+
+Web Application Details:
+- Base URL: {BASE_URL}
+- Authentication Requirements: {AUTH_DETAILS}
+- Proxies for Distributed Testing (if applicable): {PROXIES_LIST}
+- Credentials for Multi-User Simulation (if applicable): {CREDENTIALS_LIST}
+- Behavior Pattern: {BEHAVIOR_PATTERN}
+
+HTML Structures of Key Pages (use these to derive selectors for actions like
+FillFormAction or ClickAction):
+{PAGE_SECTIONS}
+
+Tests to Implement: Provide a numbered or bulleted list of tests. For each,
+specify:
+- Type (e.g., Security TTP, Load Test, Workflow Journey).
+- Description (e.g., "Brute-force login with common passwords, expect failure
+due to lockout").
+- Expected Result (True/False).
+- Scale (e.g., replications=100 for load tests).
+- Any custom parameters.
+
+Example List (replace with your specifics):
+1. Security Test: Brute-force login attempts on /login page using usernames
+   ['admin'] and passwords ['password', '123456'], selectors:
+username_selector='#username', password_selector='#password',
+submit_selector='#submit'. Expected result: False (should be blocked).
+2. Workflow Journey: User registration flow – navigate to /register, fill form
+   with email='test@example.com', password='Secure123!', click submit, assert
+URL contains 'verification'.
+3. Load Test: Simulate 500 concurrent user logins using ScaleOrchestrator,
+   max_workers=20, expected success rate >90%.
+4. [ADD_MORE_TESTS_AS_NEEDED] (e.g., Edge Case: File upload with large files,
+   expect handling without errors.)
+
+Generate the Python code accordingly.
+"#;
 
 fn is_same_domain(url: &str, base_domain: &str) -> bool {
     Url::parse(url)
@@ -79,13 +183,34 @@ fn extract_links(document: &NodeRef, base_url: &Url, base_domain: &str) -> Vec<S
     links
 }
 
+fn detect_auth_details(page_contents: &HashMap<String, String>) -> String {
+    // Look for common authentication patterns
+    for (path, content) in page_contents {
+        let content_lower = content.to_lowercase();
+        
+        // Check for login forms
+        if path.contains("login") || path.contains("signin") || path.contains("auth") {
+            if content_lower.contains("password") && content_lower.contains("input") {
+                return format!("Login page detected at {}. Use BasicAuth or form-based authentication. Analyze the form structure for exact selectors.", path);
+            }
+        }
+        
+        // Check for API endpoints that might use bearer tokens
+        if content_lower.contains("bearer") || content_lower.contains("authorization") {
+            return "Bearer token authentication likely required. Check API documentation or network requests.".to_string();
+        }
+    }
+    
+    "No specific authentication method detected. Manual analysis required.".to_string()
+}
+
 async fn process_batch(
     client: &reqwest::Client,
     urls: Vec<String>,
     base_url: Url,
     base_domain: String,
-) -> (Vec<String>, Vec<String>) {
-    let mut results = Vec::new();
+) -> (HashMap<String, (String, String)>, Vec<String>) {
+    let mut results = HashMap::new();
     let mut new_urls = Vec::new();
 
     let tasks: Vec<_> = urls.into_iter().map(|url| {
@@ -99,7 +224,7 @@ async fn process_batch(
                 Ok((title, content)) => {
                     let document: NodeRef = parse_html().one(content.clone());
                     let links = extract_links(&document, &base_url_clone, &base_domain_clone);
-                    Some((title, content, links))
+                    Some((url_clone, title, content, links))
                 }
                 Err(e) => {
                     eprintln!("Error fetching {}: {}", url_clone, e);
@@ -110,8 +235,8 @@ async fn process_batch(
     }).collect();
 
     for task in tasks {
-        if let Ok(Some((title, content, links))) = task.await {
-            results.push(format!("# {}\n\n```html\n{}\n```\n", title, content));
+        if let Ok(Some((url, title, content, links))) = task.await {
+            results.insert(url, (title, content));
             new_urls.extend(links);
         }
     }
@@ -119,7 +244,37 @@ async fn process_batch(
     (results, new_urls)
 }
 
-async fn crawl_and_generate_markdown_async(start_url: &str, batch_size: usize, max_pages: usize) -> Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>> {
+fn build_page_sections(page_contents: &HashMap<String, (String, String)>, _base_url: &Url) -> String {
+    let mut sections = Vec::new();
+    
+    // Sort pages by path for consistent output
+    let mut sorted_pages: Vec<_> = page_contents.iter().collect();
+    sorted_pages.sort_by_key(|(url, _)| *url);
+    
+    for (url, (_title, content)) in sorted_pages {
+        if let Ok(parsed_url) = Url::parse(url) {
+            let path = if parsed_url.path() == "/" {
+                "/ (Home Page)".to_string()
+            } else {
+                parsed_url.path().to_string()
+            };
+            
+            sections.push(format!(
+                "- {} HTML:\n```\n{}\n```",
+                path,
+                content
+            ));
+        }
+    }
+    
+    if sections.is_empty() {
+        "[No pages scraped]".to_string()
+    } else {
+        sections.join("\n")
+    }
+}
+
+async fn crawl_and_generate_prompt_async(start_url: &str, batch_size: usize, max_pages: usize) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let base_url = Url::parse(start_url)?;
     let base_domain = base_url.host_str().unwrap().to_string();
 
@@ -129,7 +284,7 @@ async fn crawl_and_generate_markdown_async(start_url: &str, batch_size: usize, m
 
     let mut visited: HashSet<String> = HashSet::new();
     let mut queue: VecDeque<String> = VecDeque::new();
-    let mut all_results: Vec<String> = Vec::new();
+    let mut all_page_contents: HashMap<String, (String, String)> = HashMap::new();
 
     queue.push_back(start_url.to_string());
 
@@ -157,7 +312,7 @@ async fn crawl_and_generate_markdown_async(start_url: &str, batch_size: usize, m
         // Process the batch
         let (results, new_urls) = process_batch(&client, batch, base_url.clone(), base_domain.clone()).await;
 
-        all_results.extend(results);
+        all_page_contents.extend(results);
 
         // Add new URLs to the queue
         for url in new_urls {
@@ -172,15 +327,27 @@ async fn crawl_and_generate_markdown_async(start_url: &str, batch_size: usize, m
         }
     }
 
-    Ok(all_results)
+    // Build the populated prompt
+    let page_sections = build_page_sections(&all_page_contents, &base_url);
+    let auth_details = detect_auth_details(&all_page_contents.iter().map(|(k, (_, v))| (k.clone(), v.clone())).collect());
+    
+    let populated_prompt = PROMPT_TEMPLATE
+        .replace("{BASE_URL}", start_url)
+        .replace("{AUTH_DETAILS}", &auth_details)
+        .replace("{PROXIES_LIST}", "[Leave blank if not needed]")
+        .replace("{CREDENTIALS_LIST}", "[Leave blank if not needed]") 
+        .replace("{BEHAVIOR_PATTERN}", "HumanBehavior(base_delay=2.0, typing_delay=0.1)")
+        .replace("{PAGE_SECTIONS}", &page_sections);
+
+    Ok(populated_prompt)
 }
 
-fn crawl_and_generate_markdown(start_url: &str, batch_size: usize, max_pages: usize) {
+fn crawl_and_generate_prompt(start_url: &str, batch_size: usize, max_pages: usize) {
     let rt = Runtime::new().unwrap();
 
-    match rt.block_on(crawl_and_generate_markdown_async(start_url, batch_size, max_pages)) {
-        Ok(results) => {
-            println!("{}", results.join("\n"));
+    match rt.block_on(crawl_and_generate_prompt_async(start_url, batch_size, max_pages)) {
+        Ok(prompt) => {
+            println!("{}", prompt);
         }
         Err(e) => {
             eprintln!("Error during crawling: {}", e);
@@ -189,7 +356,7 @@ fn crawl_and_generate_markdown(start_url: &str, batch_size: usize, max_pages: us
 }
 
 #[derive(Parser, Debug)]
-#[command(about = "Multithreaded web scraper to crawl same-domain pages and output Markdown with HTML content.")]
+#[command(about = "Multithreaded web scraper to crawl same-domain pages and generate Scythe testing prompt.")]
 struct Args {
     url: String,
     #[arg(short, long, default_value_t = DEFAULT_BATCH_SIZE)]
@@ -200,5 +367,5 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
-    crawl_and_generate_markdown(&args.url, args.batch_size, args.max_pages);
+    crawl_and_generate_prompt(&args.url, args.batch_size, args.max_pages);
 }
