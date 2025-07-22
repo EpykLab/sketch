@@ -187,20 +187,20 @@ fn detect_auth_details(page_contents: &HashMap<String, String>) -> String {
     // Look for common authentication patterns
     for (path, content) in page_contents {
         let content_lower = content.to_lowercase();
-        
+
         // Check for login forms
         if path.contains("login") || path.contains("signin") || path.contains("auth") {
             if content_lower.contains("password") && content_lower.contains("input") {
                 return format!("Login page detected at {}. Use BasicAuth or form-based authentication. Analyze the form structure for exact selectors.", path);
             }
         }
-        
+
         // Check for API endpoints that might use bearer tokens
         if content_lower.contains("bearer") || content_lower.contains("authorization") {
             return "Bearer token authentication likely required. Check API documentation or network requests.".to_string();
         }
     }
-    
+
     "No specific authentication method detected. Manual analysis required.".to_string()
 }
 
@@ -246,11 +246,11 @@ async fn process_batch(
 
 fn build_page_sections(page_contents: &HashMap<String, (String, String)>, _base_url: &Url) -> String {
     let mut sections = Vec::new();
-    
+
     // Sort pages by path for consistent output
     let mut sorted_pages: Vec<_> = page_contents.iter().collect();
     sorted_pages.sort_by_key(|(url, _)| *url);
-    
+
     for (url, (_title, content)) in sorted_pages {
         if let Ok(parsed_url) = Url::parse(url) {
             let path = if parsed_url.path() == "/" {
@@ -258,15 +258,15 @@ fn build_page_sections(page_contents: &HashMap<String, (String, String)>, _base_
             } else {
                 parsed_url.path().to_string()
             };
-            
+
             sections.push(format!(
-                "- {} HTML:\n```\n{}\n```",
+                "- {} HTML:\n```html\n{}\n```",
                 path,
                 content
             ));
         }
     }
-    
+
     if sections.is_empty() {
         "[No pages scraped]".to_string()
     } else {
@@ -330,12 +330,12 @@ async fn crawl_and_generate_prompt_async(start_url: &str, batch_size: usize, max
     // Build the populated prompt
     let page_sections = build_page_sections(&all_page_contents, &base_url);
     let auth_details = detect_auth_details(&all_page_contents.iter().map(|(k, (_, v))| (k.clone(), v.clone())).collect());
-    
+
     let populated_prompt = PROMPT_TEMPLATE
         .replace("{BASE_URL}", start_url)
         .replace("{AUTH_DETAILS}", &auth_details)
         .replace("{PROXIES_LIST}", "[Leave blank if not needed]")
-        .replace("{CREDENTIALS_LIST}", "[Leave blank if not needed]") 
+        .replace("{CREDENTIALS_LIST}", "[Leave blank if not needed]")
         .replace("{BEHAVIOR_PATTERN}", "HumanBehavior(base_delay=2.0, typing_delay=0.1)")
         .replace("{PAGE_SECTIONS}", &page_sections);
 
