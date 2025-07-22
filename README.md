@@ -1,4 +1,7 @@
-# Sketch
+<h1 align="center">
+  <img src="./assets/sketch-logo.png" width="200" alt="sketch" width="200px">
+  <br>
+</h1>
 
 <p align="center">
   <strong>A powerful web scraper that generates AI-ready prompts for the Scythe testing framework</strong>
