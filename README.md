@@ -36,6 +36,12 @@ The output is a ready-to-use prompt that can be given to AI assistants to genera
 
 ## 📥 Installation
 
+### Install with eget
+
+```bash
+eget EpykLab/sketch --to=$HOME/.local/bin/
+```
+
 ### Download Pre-built Binaries
 
 Download the latest release for your platform:
