@@ -68,18 +68,24 @@ must:
 - Handle web elements using CSS selectors or IDs based on provided HTML.
 
 Think step-by-step:
-1. Analyze the web app's URL, authentication, and HTML structures to identify
+1. Take the time to look over the scythe repository (https://github.com/EpykLab/scythe).
+   The repository contains extensive documentation as well a code examples. Ananlyze all
+   material required to understand scythe and how to build with it.
+2. Analyze the web app's URL, authentication, and HTML structures to identify
    selectors (e.g., #username for inputs).
-2. Map each test description to Scythe components (e.g., use LoginBruteforceTTP
+3. Map each test description to Scythe components (e.g., use LoginBruteforceTTP
    for brute-force tests, Journey for multi-step flows).
-3. For security tests: Expect failures where controls should block
+4. For security tests: Expect failures where controls should block
    (expected_result=False).
-4. For load/scale tests: Use orchestrators with replications and workers.
-5. For workflows: Build Journeys with sequential steps and assertions.
-6. Ensure code is safe: No infinite loops, respect rate limits via behaviors.
-7. If a test requires custom logic, extend base classes appropriately.
-8. Output only the Python code in a single code block, without additional
+5. For load/scale tests: Use orchestrators with replications and workers.
+6. For workflows: Build Journeys with sequential steps and assertions.
+7. Ensure code is safe: No infinite loops, respect rate limits via behaviors.
+8. If a test requires custom logic, extend base classes appropriately.
+9. Output only the Python code in a single code block, without additional
    explanations.
+10. Do no hallucinate classes, methods or other code that are not defined
+    within the scythe codebase
+   
 
 Web Application Details:
 - Base URL: {BASE_URL}
