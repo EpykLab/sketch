@@ -4,6 +4,7 @@ use kuchiki::traits::TendrilSink;
 use reqwest::header::USER_AGENT;
 use std::collections::{HashMap, HashSet, VecDeque};
 
+
 use std::time::Duration;
 use tokio::runtime::Runtime;
 use url::Url;
@@ -215,6 +216,7 @@ async fn process_batch(
     urls: Vec<String>,
     base_url: Url,
     base_domain: String,
+    silent: bool,
 ) -> (HashMap<String, (String, String)>, Vec<String>) {
     let mut results = HashMap::new();
     let mut new_urls = Vec::new();
@@ -233,7 +235,9 @@ async fn process_batch(
                     Some((url_clone, title, content, links))
                 }
                 Err(e) => {
-                    eprintln!("Error fetching {}: {}", url_clone, e);
+                    if !silent {
+                        eprintln!("Error fetching {}: {}", url_clone, e);
+                    }
                     None
                 }
             }
@@ -280,7 +284,7 @@ fn build_page_sections(page_contents: &HashMap<String, (String, String)>, _base_
     }
 }
 
-async fn crawl_and_generate_prompt_async(start_url: &str, batch_size: usize, max_pages: usize) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+async fn crawl_and_generate_prompt_async(start_url: &str, batch_size: usize, max_pages: usize, silent: bool) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let base_url = Url::parse(start_url)?;
     let base_domain = base_url.host_str().unwrap().to_string();
 
@@ -313,10 +317,12 @@ async fn crawl_and_generate_prompt_async(start_url: &str, batch_size: usize, max
             break;
         }
 
-        println!("Processing batch of {} URLs... (Total visited: {})", batch.len(), visited.len());
+        if !silent {
+            println!("Processing batch of {} URLs... (Total visited: {})", batch.len(), visited.len());
+        }
 
         // Process the batch
-        let (results, new_urls) = process_batch(&client, batch, base_url.clone(), base_domain.clone()).await;
+        let (results, new_urls) = process_batch(&client, batch, base_url.clone(), base_domain.clone(), silent).await;
 
         all_page_contents.extend(results);
 
@@ -348,12 +354,25 @@ async fn crawl_and_generate_prompt_async(start_url: &str, batch_size: usize, max
     Ok(populated_prompt)
 }
 
-fn crawl_and_generate_prompt(start_url: &str, batch_size: usize, max_pages: usize) {
+fn crawl_and_generate_prompt(start_url: &str, batch_size: usize, max_pages: usize, output_file: Option<String>, silent: bool) {
     let rt = Runtime::new().unwrap();
 
-    match rt.block_on(crawl_and_generate_prompt_async(start_url, batch_size, max_pages)) {
+    match rt.block_on(crawl_and_generate_prompt_async(start_url, batch_size, max_pages, silent)) {
         Ok(prompt) => {
-            println!("{}", prompt);
+            if let Some(filename) = output_file {
+                match std::fs::write(&filename, &prompt) {
+                    Ok(_) => {
+                        if !silent {
+                            eprintln!("Output saved to: {}", filename);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Error writing to file {}: {}", filename, e);
+                    }
+                }
+            } else {
+                println!("{}", prompt);
+            }
         }
         Err(e) => {
             eprintln!("Error during crawling: {}", e);
@@ -369,9 +388,13 @@ struct Args {
     batch_size: usize,
     #[arg(short, long, default_value_t = DEFAULT_MAX_PAGES)]
     max_pages: usize,
+    #[arg(short, long, help = "Output file to save scan content")]
+    output: Option<String>,
+    #[arg(short, long, help = "Silent mode - suppress runtime logging")]
+    silent: bool,
 }
 
 fn main() {
     let args = Args::parse();
-    crawl_and_generate_prompt(&args.url, args.batch_size, args.max_pages);
+    crawl_and_generate_prompt(&args.url, args.batch_size, args.max_pages, args.output, args.silent);
 }
