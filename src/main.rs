@@ -69,9 +69,9 @@ must:
 - Handle web elements using CSS selectors or IDs based on provided HTML.
 
 Think step-by-step:
-1. Take the time to look over the scythe repository (https://github.com/EpykLab/scythe).
-   The repository contains extensive documentation as well a code examples. Ananlyze all
-   material required to understand scythe and how to build with it.
+1. The scythe docs are available via context7 MCP. When generating code ensure 
+   that you understand how to use the library as defined in the latest version 
+   of the docs. https://context7.com/epyklab/scythe
 2. Analyze the web app's URL, authentication, and HTML structures to identify
    selectors (e.g., #username for inputs).
 3. Map each test description to Scythe components (e.g., use LoginBruteforceTTP
