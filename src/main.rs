@@ -1,9 +1,8 @@
 use clap::Parser;
-use kuchiki::{parse_html, NodeRef};
 use kuchiki::traits::TendrilSink;
+use kuchiki::{NodeRef, parse_html};
 use reqwest::header::USER_AGENT;
 use std::collections::{HashMap, HashSet, VecDeque};
-
 
 use std::time::Duration;
 use tokio::runtime::Runtime;
@@ -67,6 +66,9 @@ must:
 - Execute the tests and print basic results (e.g., success rates, metrics).
 - Be modular, readable, and follow Python best practices (PEP 8 style, comments, error handling).
 - Handle web elements using CSS selectors or IDs based on provided HTML.
+- Use the EpykLab/scythe context7 MCP for guidance on the code base
+- All code writen for this test should be place in the following path (be sure to use the existing main.py file):
+  {DESTINATION_PATH}
 
 Think step-by-step:
 1. The scythe docs are available via context7 MCP. When generating code ensure 
@@ -121,7 +123,7 @@ URL contains 'verification'.
 4. [ADD_MORE_TESTS_AS_NEEDED] (e.g., Edge Case: File upload with large files,
    expect handling without errors.)
 
-Generate the Python code accordingly.
+Generate the Python code accordingly. 
 "#;
 
 fn is_same_domain(url: &str, base_domain: &str) -> bool {
@@ -146,10 +148,16 @@ fn extract_main_content(document: &NodeRef) -> String {
     }
 }
 
-async fn fetch_url(client: &reqwest::Client, url: &str) -> Result<(String, String), Box<dyn std::error::Error + Send + Sync>> {
+async fn fetch_url(
+    client: &reqwest::Client,
+    url: &str,
+) -> Result<(String, String), Box<dyn std::error::Error + Send + Sync>> {
     let response = client
         .get(url)
-        .header(USER_AGENT, "Sketch/1.0 (for testing purposes; contact: your.email@example.com)")
+        .header(
+            USER_AGENT,
+            "Sketch/1.0 (for testing purposes; contact: your.email@example.com)",
+        )
         .send()
         .await?;
 
@@ -198,7 +206,10 @@ fn detect_auth_details(page_contents: &HashMap<String, String>) -> String {
         // Check for login forms
         if path.contains("login") || path.contains("signin") || path.contains("auth") {
             if content_lower.contains("password") && content_lower.contains("input") {
-                return format!("Login page detected at {}. Use BasicAuth or form-based authentication. Analyze the form structure for exact selectors.", path);
+                return format!(
+                    "Login page detected at {}. Use BasicAuth or form-based authentication. Analyze the form structure for exact selectors.",
+                    path
+                );
             }
         }
 
@@ -221,28 +232,31 @@ async fn process_batch(
     let mut results = HashMap::new();
     let mut new_urls = Vec::new();
 
-    let tasks: Vec<_> = urls.into_iter().map(|url| {
-        let client = client.clone();
-        let url_clone = url.clone();
-        let base_url_clone = base_url.clone();
-        let base_domain_clone = base_domain.clone();
-        tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(REQUEST_DELAY_MS)).await;
-            match fetch_url(&client, &url_clone).await {
-                Ok((title, content)) => {
-                    let document: NodeRef = parse_html().one(content.clone());
-                    let links = extract_links(&document, &base_url_clone, &base_domain_clone);
-                    Some((url_clone, title, content, links))
-                }
-                Err(e) => {
-                    if !silent {
-                        eprintln!("Error fetching {}: {}", url_clone, e);
+    let tasks: Vec<_> = urls
+        .into_iter()
+        .map(|url| {
+            let client = client.clone();
+            let url_clone = url.clone();
+            let base_url_clone = base_url.clone();
+            let base_domain_clone = base_domain.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(REQUEST_DELAY_MS)).await;
+                match fetch_url(&client, &url_clone).await {
+                    Ok((title, content)) => {
+                        let document: NodeRef = parse_html().one(content.clone());
+                        let links = extract_links(&document, &base_url_clone, &base_domain_clone);
+                        Some((url_clone, title, content, links))
                     }
-                    None
+                    Err(e) => {
+                        if !silent {
+                            eprintln!("Error fetching {}: {}", url_clone, e);
+                        }
+                        None
+                    }
                 }
-            }
+            })
         })
-    }).collect();
+        .collect();
 
     for task in tasks {
         if let Ok(Some((url, title, content, links))) = task.await {
@@ -254,7 +268,10 @@ async fn process_batch(
     (results, new_urls)
 }
 
-fn build_page_sections(page_contents: &HashMap<String, (String, String)>, _base_url: &Url) -> String {
+fn build_page_sections(
+    page_contents: &HashMap<String, (String, String)>,
+    _base_url: &Url,
+) -> String {
     let mut sections = Vec::new();
 
     // Sort pages by path for consistent output
@@ -269,11 +286,7 @@ fn build_page_sections(page_contents: &HashMap<String, (String, String)>, _base_
                 parsed_url.path().to_string()
             };
 
-            sections.push(format!(
-                "- {} HTML:\n```html\n{}\n```",
-                path,
-                content
-            ));
+            sections.push(format!("- {} HTML:\n```html\n{}\n```", path, content));
         }
     }
 
@@ -284,7 +297,13 @@ fn build_page_sections(page_contents: &HashMap<String, (String, String)>, _base_
     }
 }
 
-async fn crawl_and_generate_prompt_async(start_url: &str, batch_size: usize, max_pages: usize, silent: bool) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+async fn crawl_and_generate_prompt_async(
+    start_url: &str,
+    batch_size: usize,
+    max_pages: usize,
+    destination: &str,
+    silent: bool,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
     let base_url = Url::parse(start_url)?;
     let base_domain = base_url.host_str().unwrap().to_string();
 
@@ -318,11 +337,22 @@ async fn crawl_and_generate_prompt_async(start_url: &str, batch_size: usize, max
         }
 
         if !silent {
-            println!("Processing batch of {} URLs... (Total visited: {})", batch.len(), visited.len());
+            println!(
+                "Processing batch of {} URLs... (Total visited: {})",
+                batch.len(),
+                visited.len()
+            );
         }
 
         // Process the batch
-        let (results, new_urls) = process_batch(&client, batch, base_url.clone(), base_domain.clone(), silent).await;
+        let (results, new_urls) = process_batch(
+            &client,
+            batch,
+            base_url.clone(),
+            base_domain.clone(),
+            silent,
+        )
+        .await;
 
         all_page_contents.extend(results);
 
@@ -341,23 +371,45 @@ async fn crawl_and_generate_prompt_async(start_url: &str, batch_size: usize, max
 
     // Build the populated prompt
     let page_sections = build_page_sections(&all_page_contents, &base_url);
-    let auth_details = detect_auth_details(&all_page_contents.iter().map(|(k, (_, v))| (k.clone(), v.clone())).collect());
+    let auth_details = detect_auth_details(
+        &all_page_contents
+            .iter()
+            .map(|(k, (_, v))| (k.clone(), v.clone()))
+            .collect(),
+    );
 
     let populated_prompt = PROMPT_TEMPLATE
         .replace("{BASE_URL}", start_url)
         .replace("{AUTH_DETAILS}", &auth_details)
         .replace("{PROXIES_LIST}", "[Leave blank if not needed]")
         .replace("{CREDENTIALS_LIST}", "[Leave blank if not needed]")
-        .replace("{BEHAVIOR_PATTERN}", "HumanBehavior(base_delay=2.0, typing_delay=0.1)")
+        .replace(
+            "{BEHAVIOR_PATTERN}",
+            "HumanBehavior(base_delay=2.0, typing_delay=0.1)",
+        )
+        .replace("{DESTINATION_PATH}", &destination)
         .replace("{PAGE_SECTIONS}", &page_sections);
 
     Ok(populated_prompt)
 }
 
-fn crawl_and_generate_prompt(start_url: &str, batch_size: usize, max_pages: usize, output_file: Option<String>, silent: bool) {
+fn crawl_and_generate_prompt(
+    start_url: &str,
+    batch_size: usize,
+    max_pages: usize,
+    output_file: Option<String>,
+    destination: &str,
+    silent: bool,
+) {
     let rt = Runtime::new().unwrap();
 
-    match rt.block_on(crawl_and_generate_prompt_async(start_url, batch_size, max_pages, silent)) {
+    match rt.block_on(crawl_and_generate_prompt_async(
+        start_url,
+        batch_size,
+        max_pages,
+        destination,
+        silent,
+    )) {
         Ok(prompt) => {
             if let Some(filename) = output_file {
                 match std::fs::write(&filename, &prompt) {
@@ -381,7 +433,9 @@ fn crawl_and_generate_prompt(start_url: &str, batch_size: usize, max_pages: usiz
 }
 
 #[derive(Parser, Debug)]
-#[command(about = "Multithreaded web scraper to crawl same-domain pages and generate Scythe testing prompt.")]
+#[command(
+    about = "Multithreaded web scraper to crawl same-domain pages and generate Scythe testing prompt."
+)]
 struct Args {
     url: String,
     #[arg(short, long, default_value_t = DEFAULT_BATCH_SIZE)]
@@ -391,10 +445,23 @@ struct Args {
     #[arg(short, long, help = "Output file to save scan content")]
     output: Option<String>,
     #[arg(short, long, help = "Silent mode - suppress runtime logging")]
+    destination: String,
+    #[arg(
+        short,
+        long,
+        help = "The destination main.py file for all generated code"
+    )]
     silent: bool,
 }
 
 fn main() {
     let args = Args::parse();
-    crawl_and_generate_prompt(&args.url, args.batch_size, args.max_pages, args.output, args.silent);
+    crawl_and_generate_prompt(
+        &args.url,
+        args.batch_size,
+        args.max_pages,
+        args.output,
+        &args.destination,
+        args.silent,
+    );
 }
