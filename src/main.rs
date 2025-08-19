@@ -55,10 +55,94 @@ requirements.txt).
 tests expecting blocks). Use realistic data. Handle retries, errors gracefully.
 Test in non-production environments. Follow MIT License guidelines.
 
+## CLI Configuration Instructions
+
+Your generated test code MUST implement configurable parameters using CLI arguments
+to override default values. Instead of hardcoding values in your test scripts,
+use Python's argparse module to make key parameters configurable from the command line.
+
+### Required CLI Implementation Pattern:
+
+```python
+import argparse
+from pathlib import Path
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Scythe test script")
+    
+    # Add CLI arguments using the standardized parameter names below
+    parser.add_argument("--target", required=True, 
+                       help="Base URL of the web application")
+    parser.add_argument("--batch-size", type=int, default=10,
+                       help="Number of operations per batch")
+    # Add other relevant parameters from the standardized list
+    
+    return parser.parse_args()
+
+# Usage in your test code:
+args = parse_arguments()
+base_url = args.target
+batch_size = args.batch_size
+```
+
+### Standardized CLI Parameter Names
+
+Use these standardized parameter names consistently across all test scripts to
+ensure compatibility and avoid confusion:
+
+**Core Application Parameters:**
+- `--target`: Base URL of the web application under test (required)
+- `--endpoint`: Specific API endpoint or page path (optional)
+- `--protocol`: Protocol to use (http/https, default: https)
+- `--port`: Port number for the target application
+
+**Authentication Parameters:**
+- `--username`: Username for authentication
+- `--password`: Password for authentication  
+- `--token`: Bearer token or API key
+- `--auth-type`: Authentication method (basic, bearer, form, etc.)
+- `--credentials-file`: Path to file containing multiple user credentials
+
+**Test Data Parameters:**
+- `--users-file`: Path to CSV file containing user data
+- `--emails-file`: Path to text file containing email addresses
+- `--payload-file`: Path to file containing test payloads
+- `--data-file`: Generic path to test data file
+
+**Execution Control Parameters:**
+- `--batch-size`: Number of operations per batch (default: 10)
+- `--max-batches`: Maximum number of batches to run
+- `--workers`: Number of concurrent workers/threads
+- `--replications`: Number of test replications for load testing
+- `--timeout`: Request timeout in seconds
+- `--delay`: Delay between requests in seconds
+
+**Browser/Execution Parameters:**
+- `--headless`: Run browser in headless mode (flag)
+- `--browser`: Browser type (chrome, firefox, etc.)
+- `--user-agent`: Custom user agent string
+- `--proxy`: Proxy server URL
+- `--proxy-file`: Path to file containing proxy list
+
+**Output and Reporting Parameters:**
+- `--output-dir`: Directory for output files
+- `--report-format`: Report format (json, csv, html)
+- `--log-level`: Logging level (debug, info, warning, error)
+- `--verbose`: Enable verbose output (flag)
+- `--silent`: Suppress output except errors (flag)
+
+**Test Control Parameters:**
+- `--fail-fast`: Stop immediately on first failure (flag)
+- `--dry-run`: Validate configuration without executing tests (flag)
+- `--test-type`: Type of test to run (load, security, functional)
+- `--iterations`: Number of test iterations
+- `--duration`: Test duration in seconds
+
 Your task is to generate complete, standalone, runnable Python code that uses
 Scythe to implement the specified tests on the target web application. The code
 must:
 - Include all necessary imports.
+- Implement CLI argument parsing using the standardized parameter names above.
 - Define TTPs, Journeys, or Orchestrators as needed.
 - Incorporate authentication if required.
 - Apply appropriate behaviors (e.g., HumanBehavior for realistic simulations).
